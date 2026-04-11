@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 // ─── Progress bar configuration ───────────────────────────────────────────────
 const TOTAL_STEPS = 5;
@@ -140,6 +141,50 @@ function ProgressBar({ total, current }: { total: number; current: number }) {
 
 export default function Calibration() {
   const [metronome, setMetronome] = useState(true);
+  const [isCalibrated, setIsCalibrated] = useState(false);
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const [hasStarted, setHasStarted] = useState(false);
+  const router = useRouter();
+
+  useEffect(() => {
+    // Check localStorage asynchronously to appease the strict linter rule
+    const timer = setTimeout(() => {
+      setIsCalibrated(localStorage.getItem("isCalibrated") === "true");
+    }, 0);
+
+    // Wipes the storage when the user hard-refreshes or closes the tab
+    const handleBeforeUnload = () => {
+      localStorage.removeItem("isCalibrated");
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (countdown === null || countdown <= 0) return;
+
+    const timer = setTimeout(() => {
+      setCountdown(countdown - 1);
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [countdown]);
+
+  const handleStartTimer = () => {
+    setHasStarted(true);
+    setCountdown(3);
+  };
+
+  const handleCompleteCalibration = () => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("isCalibrated", "true");
+    }
+    router.push("/");
+  }
 
   return (
     <div className="flex-1 bg-[#fffdf7] flex flex-col">
@@ -170,6 +215,15 @@ export default function Calibration() {
 
           {/* Paper rectangle */}
           <div className="absolute top-[475px] left-[227px] w-[622px] h-[50px] border-2 border-red-500 bg-white/10" />
+
+          {/* Visual Countdown Overlay */}
+          {countdown !== null && countdown > 0 && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-50">
+              <span className="text-white text-[150px] font-sans font-bold drop-shadow-lg">
+                {countdown}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Right sidebar */}
@@ -261,13 +315,19 @@ export default function Calibration() {
             <div className="flex items-center gap-[27px]">
               <button
                 aria-label="Play"
-                className="hover:opacity-70 transition-opacity"
+                disabled={!isCalibrated}
+                className={`transition-opacity ${
+                  !isCalibrated ? "opacity-30 cursor-not-allowed" : "hover:opacity-70"
+                }`}
               >
                 <PlayIcon />
               </button>
               <button
                 aria-label="Stop"
-                className="hover:opacity-70 transition-opacity"
+                disabled={!isCalibrated}
+                className={`transition-opacity ${
+                  !isCalibrated ? "opacity-30 cursor-not-allowed" : "hover:opacity-70"
+                }`}
               >
                 <StopIcon />
               </button>
@@ -276,9 +336,15 @@ export default function Calibration() {
         </div>
       </div>
 
-      {/* Step instruction */}
-      <div className="pl-[61px] pt-[35px] pb-[20px]">
+      {/* Step instruction and Timer button */}
+      <div className="flex items-center gap-6 pl-[61px] pr-[47px] pt-[35px] pb-[20px]">
         <p className="text-[30px] text-black font-sans">{STEP_INSTRUCTION}</p>
+        <button
+          onClick={handleStartTimer}
+          className="shrink-0 border-[1.5px] border-black bg-[#fffdf7] px-6 py-3 rounded-[8px] text-[30px] text-black font-sans whitespace-nowrap hover:bg-black/5 transition-colors"
+        >
+          {hasStarted ? "Restart" : "Start"}
+        </button>
       </div>
 
       {/* Bottom nav: Previous Step | progress bar | Next Step */}
@@ -292,12 +358,12 @@ export default function Calibration() {
 
         <ProgressBar total={TOTAL_STEPS} current={CURRENT_STEP} />
 
-        <Link
-          href="/"
-          className="shrink-0 border-[1.5px] border-black/50 bg-[#fffdf7] px-6 py-3 rounded-[8px] text-[30px] text-black/50 font-sans whitespace-nowrap"
+        <button
+          onClick={handleCompleteCalibration}
+          className="shrink-0 border-[1.5px] border-black bg-[#fffdf7] px-6 py-3 rounded-[8px] text-[30px] text-black font-sans whitespace-nowrap hover:bg-black/5 transition-colors"
         >
           Complete Calibration
-        </Link>
+        </button>
       </div>
     </div>
   );

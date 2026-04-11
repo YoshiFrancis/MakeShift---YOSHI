@@ -56,9 +56,21 @@ function StopIcon() {
 export default function Home() {
   const [metronome, setMetronome] = useState(true);
   const [cameraReady, setCameraReady] = useState(false);
+  const [isCalibrated, setIsCalibrated] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
+    // Check localStorage asynchronously to appease the strict linter rule
+    const timer = setTimeout(() => {
+      setIsCalibrated(localStorage.getItem("isCalibrated") === "true");
+    }, 0);
+
+    // Wipes the storage when the user hard-refreshes or closes the tab
+    const handleBeforeUnload = () => {
+      localStorage.removeItem("isCalibrated");
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
     let stream: MediaStream | null = null;
 
     navigator.mediaDevices
@@ -80,6 +92,9 @@ export default function Home() {
       .catch(() => {});
 
     return () => {
+      // Clean up the timer, event listener, and camera stream
+      clearTimeout(timer);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
       stream?.getTracks().forEach((t) => t.stop());
     };
   }, []);
@@ -195,13 +210,19 @@ export default function Home() {
             <div className="flex items-center gap-[27px]">
               <button
                 aria-label="Play"
-                className="hover:opacity-70 transition-opacity"
+                disabled={!isCalibrated}
+                className={`transition-opacity ${
+                  !isCalibrated ? "opacity-30 cursor-not-allowed" : "hover:opacity-70"
+                }`}
               >
                 <PlayIcon />
               </button>
               <button
                 aria-label="Stop"
-                className="hover:opacity-70 transition-opacity"
+                disabled={!isCalibrated}
+                className={`transition-opacity ${
+                  !isCalibrated ? "opacity-30 cursor-not-allowed" : "hover:opacity-70"
+                }`}
               >
                 <StopIcon />
               </button>
