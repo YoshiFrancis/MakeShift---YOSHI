@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
 
 // ─── Progress bar configuration ───────────────────────────────────────────────
 const TOTAL_STEPS = 5;
@@ -141,10 +142,14 @@ function ProgressBar({ total, current }: { total: number; current: number }) {
 
 export default function Calibration() {
   const [metronome, setMetronome] = useState(true);
+  const [cameraReady, setCameraReady] = useState(false);
   const [isCalibrated, setIsCalibrated] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [hasStarted, setHasStarted] = useState(false);
+  const [showingImage, setShowingImage] = useState(false);
   const router = useRouter();
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     // Check localStorage asynchronously to appease the strict linter rule
@@ -158,14 +163,118 @@ export default function Calibration() {
     };
     window.addEventListener("beforeunload", handleBeforeUnload);
 
+    let stream: MediaStream | null = null;
+
+    navigator.mediaDevices
+      .getUserMedia({
+        video: {
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          aspectRatio: 16 / 9,
+        },
+        audio: false,
+      })
+      .then((s) => {
+        stream = s;
+        if (videoRef.current) {
+          videoRef.current.srcObject = s;
+        }
+        setCameraReady(true);
+      })
+      .catch(() => {});
+
     return () => {
       clearTimeout(timer);
       window.removeEventListener("beforeunload", handleBeforeUnload);
+      stream?.getTracks().forEach((t) => t.stop());
     };
   }, []);
 
+  function canvasToImage(canvas: HTMLCanvasElement): Promise<HTMLImageElement> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+
+      img.src = canvas.toDataURL('image/png');
+  });
+}
+
+  async function capture() {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+
+    if (!video || !canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Set canvas size to match video
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    // Draw current frame
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const image = await canvasToImage(canvas);
+    return image;
+  }
+
+  async function get_finger_skeleton(image : HTMLImageElement) {
+
+    console.error("initializing model");
+    const vision = await FilesetResolver.forVisionTasks(
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+    );
+
+      const handLandmarker = await HandLandmarker.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath: "/models/hand_landmarker.task"
+      },
+      numHands: 2
+    });
+    const res = handLandmarker.detect(image);
+
+    const canvas = canvasRef.current;
+    const video = videoRef.current;
+
+    if (!video || !canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const points = [4, 8, 12, 16, 20];
+    if (res.landmarks) {
+      for (const hand of res.landmarks) {
+        for (const idx of points) {
+          const point = hand[idx];
+          const x = point.x * canvas.width;
+          const y = point.y * canvas.height;
+
+          ctx.beginPath();
+          ctx.arc(x, y, 20, 0, 2 * Math.PI);
+          ctx.fillStyle = "red";
+          ctx.fill();
+        }
+      }
+    }
+
+    setShowingImage(true);
+  }
+
   useEffect(() => {
-    if (countdown === null || countdown <= 0) return;
+    if (countdown === null || countdown < 0) return;
+    else if (countdown === 0) {
+      // get mediapipe overlay
+      capture().then((image) => {
+        if (image) {
+          get_finger_skeleton(image).then(() => {
+            console.log("W code");
+          }); // run media pipe
+        }
+      }); // hand image
+
+    }
 
     const timer = setTimeout(() => {
       setCountdown(countdown - 1);
@@ -177,6 +286,7 @@ export default function Calibration() {
   const handleStartTimer = () => {
     setHasStarted(true);
     setCountdown(3);
+    setShowingImage(false);
   };
 
   const handleCompleteCalibration = () => {
@@ -192,6 +302,24 @@ export default function Calibration() {
       <div className="flex flex-1 pt-[115px] pl-[61px] pr-[47px]">
         {/* Camera feed with calibration overlays */}
         <div className="flex-1 bg-[#090909] relative">
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className="absolute inset-0 w-full h-full object-cover"
+            style={{ display: showingImage ? 'none' : 'block' }}
+          />
+          <canvas
+            ref={canvasRef}
+            style={{ display: showingImage ? 'block' : 'none' }}
+            className="absolute inset-0 w-full h-full object-cover"
+          />
+          {!cameraReady && (
+            <p className="absolute inset-0 flex items-center justify-center text-white text-[37px] font-sans">
+              Live Camera Feed
+            </p>
+          )}
           {/* Warning banner */}
           <div className="absolute top-[74px] left-[227px] flex items-center gap-[34px]">
             <AlertTriangle />
