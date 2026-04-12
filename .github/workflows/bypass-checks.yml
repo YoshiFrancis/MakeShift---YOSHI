@@ -1,0 +1,19 @@
+name: Bypass Checks
+
+on:
+  pull_request:
+    branches: [ "main" ]
+    paths-ignore:
+      - '**.py'
+      - 'requirements.txt'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "No Python changes detected. Bypassing tests."
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "No Python changes detected. Bypassing linting."

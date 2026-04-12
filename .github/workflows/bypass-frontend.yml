@@ -1,0 +1,13 @@
+name: Frontend Bypass
+
+on:
+  pull_request:
+    branches: [ "main" ]
+    paths-ignore:
+      - "frontend/**"
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "No frontend changes detected. Bypassing frontend checks."
