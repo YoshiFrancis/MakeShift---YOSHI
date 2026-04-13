@@ -388,11 +388,11 @@ export default function Calibration() {
                 </span>
                 <button
                   onClick={() => setMetronome(!metronome)}
-                  className={`relative w-[40px] h-[24px] rounded-full transition-colors ${metronome ? "bg-[#1e1e1e]" : "bg-[#d9d9d9]"}`}
+                  className={`relative w-[40px] h-[24px] rounded-full overflow-hidden transition-colors ${metronome ? "bg-[#1e1e1e]" : "bg-[#d9d9d9]"}`}
                   aria-label="Toggle metronome"
                 >
                   <span
-                    className={`absolute top-[2px] w-[20px] h-[20px] rounded-full bg-white shadow transition-transform ${metronome ? "translate-x-[18px]" : "translate-x-[2px]"}`}
+                    className={`absolute top-[2px] left-0 w-[20px] h-[20px] rounded-full bg-white shadow transition-transform ${metronome ? "translate-x-[18px]" : "translate-x-[2px]"}`}
                   />
                 </button>
               </div>
