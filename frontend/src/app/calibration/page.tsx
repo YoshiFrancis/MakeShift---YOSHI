@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
@@ -91,26 +91,6 @@ function AlertTriangle() {
   );
 }
 
-function HandIcon() {
-  return (
-    <svg
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <path
-        d="M9 11V6a1 1 0 0 1 2 0v5M11 7V5a1 1 0 0 1 2 0v2M13 7a1 1 0 0 1 2 0v2M15 9a1 1 0 0 1 2 0v5c0 3.314-2.686 6-6 6s-6-2.686-6-6v-3a1 1 0 0 1 2 0"
-        stroke="white"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
 function ProgressBar({ total, current }: { total: number; current: number }) {
   return (
     <div className="flex flex-1 items-center">
@@ -151,7 +131,7 @@ export default function Calibration() {
   const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { stream, cameraReady } = useCamera();
+  const { stream } = useCamera();
 
   useEffect(() => {
     if (stream && videoRef.current) {
@@ -188,7 +168,7 @@ export default function Calibration() {
   });
 }
 
-  async function capture() {
+  const capture = useCallback(async function capture() {
     const video = videoRef.current;
     const canvas = canvasRef.current;
 
@@ -205,7 +185,7 @@ export default function Calibration() {
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     const image = await canvasToImage(canvas);
     return image;
-  }
+  }, []);
 
   async function get_finger_skeleton(image : HTMLImageElement) {
 
@@ -277,7 +257,7 @@ export default function Calibration() {
     }, 1000);
 
     return () => clearTimeout(timer);
-  }, [countdown]);
+  }, [countdown, capture]);
 
   const handleStartTimer = () => {
     setHasStarted(true);

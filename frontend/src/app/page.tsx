@@ -58,7 +58,7 @@ export default function Home() {
   const [metronome, setMetronome] = useState(true);
   const [isCalibrated, setIsCalibrated] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const { stream, cameraReady } = useCamera();
+  const { stream } = useCamera();
 
   useEffect(() => {
     if (stream && videoRef.current) {
