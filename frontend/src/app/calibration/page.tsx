@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
+import { useCamera } from "../CameraContext";
 
 // ─── Progress bar configuration ───────────────────────────────────────────────
 const TOTAL_STEPS = 5;
@@ -90,26 +91,6 @@ function AlertTriangle() {
   );
 }
 
-function HandIcon() {
-  return (
-    <svg
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <path
-        d="M9 11V6a1 1 0 0 1 2 0v5M11 7V5a1 1 0 0 1 2 0v2M13 7a1 1 0 0 1 2 0v2M15 9a1 1 0 0 1 2 0v5c0 3.314-2.686 6-6 6s-6-2.686-6-6v-3a1 1 0 0 1 2 0"
-        stroke="white"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
 function ProgressBar({ total, current }: { total: number; current: number }) {
   return (
     <div className="flex flex-1 items-center">
@@ -142,7 +123,6 @@ function ProgressBar({ total, current }: { total: number; current: number }) {
 
 export default function Calibration() {
   const [metronome, setMetronome] = useState(true);
-  const [cameraReady, setCameraReady] = useState(false);
   const [isCalibrated, setIsCalibrated] = useState(false);
   const [fingersShown, setFingersShown] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
@@ -151,6 +131,13 @@ export default function Calibration() {
   const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { stream } = useCamera();
+
+  useEffect(() => {
+    if (stream && videoRef.current) {
+      videoRef.current.srcObject = stream;
+    }
+  }, [stream]);
 
   useEffect(() => {
     // Check localStorage asynchronously to appease the strict linter rule
@@ -164,30 +151,9 @@ export default function Calibration() {
     };
     window.addEventListener("beforeunload", handleBeforeUnload);
 
-    let stream: MediaStream | null = null;
-
-    navigator.mediaDevices
-      .getUserMedia({
-        video: {
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-          aspectRatio: 16 / 9,
-        },
-        audio: false,
-      })
-      .then((s) => {
-        stream = s;
-        if (videoRef.current) {
-          videoRef.current.srcObject = s;
-        }
-        setCameraReady(true);
-      })
-      .catch(() => {});
-
     return () => {
       clearTimeout(timer);
       window.removeEventListener("beforeunload", handleBeforeUnload);
-      stream?.getTracks().forEach((t) => t.stop());
     };
   }, []);
 
@@ -202,7 +168,7 @@ export default function Calibration() {
   });
 }
 
-  async function capture() {
+  const capture = useCallback(async function capture() {
     const video = videoRef.current;
     const canvas = canvasRef.current;
 
@@ -219,7 +185,7 @@ export default function Calibration() {
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     const image = await canvasToImage(canvas);
     return image;
-  }
+  }, []);
 
   async function get_finger_skeleton(image : HTMLImageElement) {
 
@@ -291,7 +257,7 @@ export default function Calibration() {
     }, 1000);
 
     return () => clearTimeout(timer);
-  }, [countdown]);
+  }, [countdown, capture]);
 
   const handleStartTimer = () => {
     setHasStarted(true);
@@ -422,11 +388,11 @@ export default function Calibration() {
                 </span>
                 <button
                   onClick={() => setMetronome(!metronome)}
-                  className={`relative w-[40px] h-[24px] rounded-full transition-colors ${metronome ? "bg-[#1e1e1e]" : "bg-[#d9d9d9]"}`}
+                  className={`relative w-[40px] h-[24px] rounded-full overflow-hidden transition-colors ${metronome ? "bg-[#1e1e1e]" : "bg-[#d9d9d9]"}`}
                   aria-label="Toggle metronome"
                 >
                   <span
-                    className={`absolute top-[2px] w-[20px] h-[20px] rounded-full bg-white shadow transition-transform ${metronome ? "translate-x-[18px]" : "translate-x-[2px]"}`}
+                    className={`absolute top-[2px] left-0 w-[20px] h-[20px] rounded-full bg-white shadow transition-transform ${metronome ? "translate-x-[18px]" : "translate-x-[2px]"}`}
                   />
                 </button>
               </div>
