@@ -41,6 +41,7 @@ tests/
 │   ├── browserAudio.test.ts      # production DSP offline rendering
 │   ├── browserAudioLifecycle.test.ts # browser owner mocks
 │   ├── browserAudio.browser.mjs  # production browser graph check
+│   ├── homePage.test.ts              # home page modals and overlays (jsdom)
 │   ├── noteEvents.test.ts            # shared event validation, sessions and clocks
 │   ├── midiUtils.test.ts             # MIDI unit tests
 │   └── check-contrast.mjs            # theme token contrast audit
@@ -53,7 +54,9 @@ tests/
 Add future tests, helpers, and fixtures to the matching suite directory.
 Frontend tests import application modules from `../../frontend/src/`.
 `frontend/vitest.config.mts` selects `tests/frontend/` and resolves frontend
-package dependencies. The frontend TypeScript and ESLint commands also include
+package dependencies. Bare imports used by tests, including any module passed
+to `vi.mock`, need an alias there because `tests/` has no `node_modules`. Add a
+`// @vitest-environment jsdom` comment to tests that render components. The frontend TypeScript and ESLint commands also include
 that directory. Keep frontend dependencies and tool configuration in `frontend/`,
 C++ build definitions in `backend/CMakeLists.txt`, and CI workflows in `.github/`.
 Python's default recursive discovery finds `tests/python/` without extra config.
@@ -243,7 +246,41 @@ Frontend type checking and production build, Ruff, and mypy passed locally.
 ESLint passed with the two existing application warnings. clang-format 17 was
 not available locally; the C++ files were moved without content changes.
 The frontend CI path filters now include `tests/frontend/**`; Vitest remains a
-local suite pending the separate CI integration work tracked as D3.
+local suite pending the separate CI integration work tracked as D3 (since
+fixed by #152).
+
+## Vitest CI verification (issue #152)
+
+Local macOS execution on 2026-09-30, Node 26.8.1 and Vitest 4.1.11, branch
+`fix/152-vitest-in-frontend-ci` from upstream `main`.
+
+- `.github/workflows/frontend-ci.yml` adds a `Unit tests` step
+  (`npx vitest run`) after type checking, so a failing Vitest case fails the job.
+- The workflow's own file is now in its path filters (and in the Frontend
+  Bypass `paths-ignore`), so edits to `frontend-ci.yml` run the real job
+  instead of the bypass.
+- Frontend-configured `npx vitest run`: **174 tests passed across seven files**.
+- CI on PR #158 (Node 20): the `Unit tests` step ran and **174 tests passed
+  across seven files** ([job log](https://github.com/Kakrl/MakeShift/actions/runs/36744857972/job/109988354672)).
+
+### After merging `main` at `47400c7` (2026-10-01)
+
+PR #148 merged after the run above and changed key contact and calibration.
+On `main`, 23 of 236 Vitest cases failed. Nothing caught it because Vitest was
+not in CI yet.
+
+- 18 needed test updates for #148, now in this PR. Both suites stub
+  `getComputedStyle` and the canvas methods the new overlays call.
+  `recordingControls.test.tsx` passes `HandObservation` objects and runs the
+  real `LiveContactPipeline` in its overlap-only mode, since jsdom has no
+  `Worker` and the fixture has no depth calibration. Contact now highlights
+  keys before a session starts (intended in #148), so the highlight test
+  expects that and still checks that an interrupted session records nothing.
+- 5 cases in `calibrationWorkflow.test.tsx` (6.2.3) found a real defect, D21
+  ([#162](https://github.com/Kakrl/MakeShift/issues/162)). They are marked
+  `it.fails` and linked to the issue. The fix PR switches them back to `it()`.
+- Local result: **231 passed and 5 expected failures across 11 files**. CI on
+  PR #158 (Node 20) matched ([job log](https://github.com/Kakrl/MakeShift/actions/runs/36897106200/job/110486733691)).
 
 ## Documentation Expectations by Severity
 
@@ -319,7 +356,7 @@ defect report is filed.
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | D1 | High | CV / UI | (Req 1.1, 3.2) The ArUco marker and virtual keyboard overlay from PR #63 never renders. `MarkerTrackingOverlay` is imported in `page.tsx` but no JSX uses it. The `<MarkerTrackingOverlay videoRef={videoRef} />` element was dropped while resolving conflicts in merge `1669079` ("Merge branch 'main' into feature/visual-keyboard"). ESLint flags it as an unused variable, but warnings don't fail CI | `frontend/src/app/page.tsx:10` | | Open |
 | D2 | High | MIDI / UI | (Req 4.1, 4.2) Original audit found UI-only recording/export. Recording now calls the recorder through shared-event consumers (#139); production download is verified locally by 4.2.3 (#141, D18). Delete clears the completed take but lacks browser verification; Listen has no handler. Complete file-control coverage in 4.2.2 remains pending. | `frontend/src/app/page.tsx`, `frontend/src/events/pianoIntegration.ts` | [#28](https://github.com/Kakrl/MakeShift/issues/28), [#140](https://github.com/Kakrl/MakeShift/issues/140) | Recording/export fixes verified locally in [#139](https://github.com/Kakrl/MakeShift/pull/139) / [#141](https://github.com/Kakrl/MakeShift/pull/141); review/merge pending; Listen and full file-control verification open |
-| D3 | Medium | CI | The Vitest suite (4.1.3-4.1.7, 4.2.3) is not run in CI. `frontend-ci.yml` runs lint, type check, contrast, and build, but not `vitest run`, so MIDI regressions merge undetected | `.github/workflows/frontend-ci.yml` | | Open |
+| D3 | Medium | CI | The Vitest suite (4.1.3-4.1.7, 4.2.3) is not run in CI. `frontend-ci.yml` runs lint, type check, contrast, and build, but not `vitest run`, so MIDI regressions merge undetected | `.github/workflows/frontend-ci.yml` | [#152](https://github.com/Kakrl/MakeShift/issues/152) | Fixed in [#158](https://github.com/Kakrl/MakeShift/pull/158) |
 | D4 | Medium | CI | The C++ test path filter `'CMakeLists.txt'` only matches a root-level file. A PR that only changes `backend/CMakeLists.txt` skips the C++ build and tests. It should be `'**/CMakeLists.txt'` | `.github/workflows/testing.yml:29` | | Open |
 | D5 | Medium | Tests | `AudioEngineTest.StreamStartsAndStops` and `MultipleStartStopCycles` `return` early when there is no audio device, so on CI they report PASS without testing anything. Use `GTEST_SKIP()` so the skip shows in results | `tests/audio/test_audio.cpp:24-27`, `:35-38` | | Open |
 | D6 | Medium | Calibration | Versioned geometry/camera/layout and hover/rest inputs replace the boolean; live compatibility gates reuse. Manual calibration checklist passed (Carl Xu, user-reported 2026-09-28). | `frontend/src/cv/calibration.ts`, `frontend/src/app/calibration/page.tsx` | [#87](https://github.com/Kakrl/MakeShift/issues/87) | Manual verification passed (user-reported); review/merge pending |
@@ -336,6 +373,8 @@ defect report is filed.
 | D17 | Medium | UI | (Req 3.1, 3.4) The UI is not responsive. Home, calibration, and about use a fixed 267 px side column with no breakpoints, and `body` is `h-dvh overflow-hidden`, so at tablet or phone widths, short laptop screens, or 200% zoom the camera is squeezed and controls are clipped with no way to scroll to them | `frontend/src/app/layout.tsx:32`, `frontend/src/app/page.tsx:213-400`, `frontend/src/app/calibration/page.tsx:669-681`, `frontend/src/app/about/page.tsx:42-63` | [#109](https://github.com/Kakrl/MakeShift/issues/109) | Fixed in [#111](https://github.com/Kakrl/MakeShift/pull/111) |
 | D18 | High | MIDI / UI | Runtime path alias points midi-writer-js at a declarations-only file, so final Export throws on undefined Track and produces no download (Req 4.2) | `frontend/tsconfig.json` | [#140](https://github.com/Kakrl/MakeShift/issues/140) | Fix verified locally in [#141](https://github.com/Kakrl/MakeShift/pull/141); review/merge pending |
 | D19 | Medium | CI | The `Vercel preview` workflow fails on every fork PR: `actions/checkout` refuses fork code in `pull_request_target` unless the step sets `allow-unsafe-pr-checkout: true`, so labeling `preview-link` never deploys | `.github/workflows/preview.yml:33-39` | [#160](https://github.com/Kakrl/MakeShift/issues/160) | Open |
+| D20 | High | UI | (Req 3.1, 3.2, 4.2, 6.2) Merge `30706c4` (PR #98) resolved `page.tsx` by keeping the branch's older JSX, dropping the welcome and Calibration intro modals, count-in overlay, Recording Complete banner, Delete confirmation, calibration prompt, `CameraStatusOverlay`, and the aria-live region. The home Calibration tab and Delete button did nothing. ESLint flagged the orphaned state only as warnings | `frontend/src/app/page.tsx` | [#112](https://github.com/Kakrl/MakeShift/issues/112) | Fixed in [#113](https://github.com/Kakrl/MakeShift/pull/113) |
+| D21 | High | Calibration | (Req 6.2, 1.1, 2.1) After PR #148, step 5 renders the depth capture, so the step 5 capture that set the validated result can't be reached. `handleComplete` calls `router.push("/")` and writes the legacy `isCalibrated` flag before validating, so `makeshift.calibration.v1` is never saved and failed saves still navigate. 6.2.3 marks 5 cases `it.fails` until fixed | `frontend/src/app/calibration/page.tsx` | [#162](https://github.com/Kakrl/MakeShift/issues/162) | Open |
 
 ## Root Cause Analysis Log
 
@@ -346,6 +385,7 @@ comment after merge. Link the issue before the comment exists.
 | Defect | Issue | Severity | Root Cause (one line) | Fix PR | Regression Test | RCA Date | Author |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | MIDI note-off events missing required duration information | [#91](https://github.com/Kakrl/MakeShift/issues/91) | Medium | Custom MidiWriterJS TypeScript declarations hid the library's required note event fields, allowing invalid note-off event construction. | [#92](https://github.com/Kakrl/MakeShift/pull/92) | `tests/frontend/midiUtils.test.ts` — `creates a note event using the note start time and duration` (not currently run in CI) | 2026-09-20 | harrydeng104 |
+| Home page modals and overlays dropped in merge 30706c4 | [#112](https://github.com/Kakrl/MakeShift/issues/112) | High | A conflict in `page.tsx` was resolved by keeping the older branch JSX, and ESLint reported the orphaned state only as warnings, so CI passed. | [#113](https://github.com/Kakrl/MakeShift/pull/113) | `tests/frontend/homePage.test.ts` (3.1.3, 3.2.3, 3.2.4, 6.2.4; not run in CI until D3) plus `no-unused-vars` as an ESLint error (runs in `frontend-ci.yml`) | 2026-09-23 | jaddenki |
 | Production MIDI export fails | [#140](https://github.com/Kakrl/MakeShift/issues/140) | High | TypeScript path alias to a .d.ts file erased the runtime MIDI module in Turbopack; mocked tests bypassed it. | [#141](https://github.com/Kakrl/MakeShift/pull/141) | 4.2.3; `tests/frontend/midiExport.browser.mjs`, production download bytes and dialog closure; local only | 2026-09-29 | Carl Xu (Codex-assisted) |
 
 ### RCA PR Template

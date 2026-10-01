@@ -297,30 +297,6 @@ export default function Calibration() {
     return canvasToImage(canvas);
   }, []);
 
-  function detectFingers(image: HTMLImageElement) {
-    const res = detect(image);
-    const canvas = canvasRef.current;
-    if (!res || !canvas) {
-      setCaptureError("Hand detection is unavailable. Try again.");
-      return;
-    }
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    let fingertips = 0;
-    for (const hand of res.landmarks ?? []) {
-      for (const idx of [4, 8, 12, 16, 20]) {
-        const pt = hand[idx];
-        ctx.beginPath();
-        ctx.arc(pt.x * canvas.width, pt.y * canvas.height, 20, 0, 2 * Math.PI);
-        ctx.fillStyle = "red";
-        ctx.fill();
-        fingertips++;
-      }
-    }
-    if (fingertips > 0) setFingersShown(true);
-    setShowingImage(true);
-  }
-
   const captureDepthPosition = useCallback(async () => {
     if (depthCaptureBusy) return;
 

@@ -6,11 +6,13 @@ on:
     paths:
       - "frontend/**"
       - "tests/frontend/**"
+      - ".github/workflows/frontend-ci.yml"
   pull_request:
     branches: ["main"]
     paths:
       - "frontend/**"
       - "tests/frontend/**"
+      - ".github/workflows/frontend-ci.yml"
 
 jobs:
   frontend:
@@ -38,6 +40,9 @@ jobs:
 
       - name: Type check
         run: npx tsc --noEmit
+
+      - name: Unit tests
+        run: npx vitest run
 
       - name: Check WCAG color contrast
         run: npm run test:contrast

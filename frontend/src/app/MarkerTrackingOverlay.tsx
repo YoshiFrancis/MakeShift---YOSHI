@@ -45,6 +45,7 @@ import type { MarkerDetectionResult } from "../cv/types";
 import type { Point } from "../cv/types";
 import { keyIndexToMidi } from "../cv/noteMap";
 import {
+  recordKeyTransitions,
   recordMarkerDetection,
 } from "../cv/performanceMetrics";
 
@@ -195,6 +196,10 @@ export default function MarkerTrackingOverlay({
       currentKeys,
     );
     previousKeysRef.current = currentKeys;
+    recordKeyTransitions(
+      transitions.pressed.length,
+      transitions.released.length,
+    );
     if (transitions.pressed.length || transitions.released.length) {
       onKeyTransitionsRef.current?.(transitions.pressed, transitions.released);
     }

@@ -16,6 +16,11 @@ const eslintConfig = defineConfig([
       react: { version: reactVersion },
     },
   },
+  {
+    // Unused state or imports usually mean UI was dropped (see #112), so fail
+    // CI instead of warning.
+    rules: { "@typescript-eslint/no-unused-vars": "error" },
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

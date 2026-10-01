@@ -6,6 +6,7 @@ on:
     paths-ignore:
       - "frontend/**"
       - "tests/frontend/**"
+      - ".github/workflows/frontend-ci.yml"
 
 jobs:
   frontend:

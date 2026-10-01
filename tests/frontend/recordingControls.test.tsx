@@ -3,11 +3,11 @@ import { act, createElement, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { Recording } from "../../frontend/src/app/midi/midiUtils";
-import type { NormalizedLandmark } from "../../frontend/src/cv/collision";
+import type { HandObservation, NormalizedLandmark } from "../../frontend/src/cv/collision";
 
 const fixtures = vi.hoisted(() => ({
   invalidate: null as null | (() => void),
-  landmarks: null as null | ((hands: NormalizedLandmark[][]) => void),
+  landmarks: null as null | ((hands: HandObservation[]) => void),
   initializeAudio: vi.fn(async () => {}),
   takes: [] as Recording[],
   download: vi.fn(),
@@ -19,6 +19,21 @@ vi.mock("../../frontend/src/cv/keyboardGeometry", async (original) => ({
   ...await original<typeof import("../../frontend/src/cv/keyboardGeometry")>(),
   pressWhiteKey: fixtures.highlight,
 }));
+// jsdom has no Worker or depth calibration, so run the real contact pipeline
+// in its overlap-only mode; these tests cover recording, not contact sensing.
+vi.mock("../../frontend/src/cv/liveContactPipeline", async (original) => {
+  const actual = await original<typeof import("../../frontend/src/cv/liveContactPipeline")>();
+  const overlapOnly = { knuckles: false, shadows: false };
+  return {
+    ...actual,
+    CONTACT_TECHNIQUES: overlapOnly,
+    LiveContactPipeline: class extends actual.LiveContactPipeline {
+      constructor(callbacks: ConstructorParameters<typeof actual.LiveContactPipeline>[0]) {
+        super(callbacks, overlapOnly);
+      }
+    },
+  };
+});
 vi.mock("../../frontend/src/app/CameraContext", () => ({
   useCamera: () => fixtures.camera,
 }));
@@ -86,7 +101,7 @@ vi.mock("next/dynamic", async () => {
         };
       }
       return function HandFixture({ onLandmarks }: {
-        onLandmarks: (hands: NormalizedLandmark[][]) => void;
+        onLandmarks: (hands: HandObservation[]) => void;
       }) {
         fixtures.landmarks = onLandmarks;
         return null;
@@ -109,7 +124,7 @@ let currentHands: NormalizedLandmark[][] = [];
 
 beforeEach(async () => {
   dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost", pretendToBeVisual: true });
-  for (const name of ["window", "self", "document", "localStorage", "HTMLCanvasElement", "HTMLVideoElement"]) {
+  for (const name of ["window", "self", "document", "localStorage", "HTMLCanvasElement", "HTMLVideoElement", "getComputedStyle"]) {
     vi.stubGlobal(name, Reflect.get(dom.window, name));
   }
   vi.useFakeTimers();
@@ -126,12 +141,17 @@ beforeEach(async () => {
     return 1;
   });
   vi.stubGlobal("cancelAnimationFrame", vi.fn());
-  const context = Object.fromEntries(
-    ["clearRect", "drawImage", "beginPath", "moveTo", "lineTo", "closePath",
-      "fill", "stroke", "fillText"].map((name) => [name, vi.fn()]),
+  const contextMethods = ["clearRect", "drawImage", "beginPath", "moveTo",
+    "lineTo", "closePath", "fill", "stroke", "fillText", "fillRect",
+    "strokeRect", "putImageData", "save", "restore", "scale", "setLineDash"];
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
+    function (this: HTMLCanvasElement) {
+      return Object.assign(
+        Object.fromEntries(contextMethods.map((name) => [name, vi.fn()])),
+        { canvas: this },
+      ) as unknown as CanvasRenderingContext2D;
+    },
   );
-  vi.spyOn(HTMLCanvasElement.prototype, "getContext")
-    .mockReturnValue(context as unknown as CanvasRenderingContext2D);
   for (const [name, value] of Object.entries({ readyState: 4, videoWidth: 1000, videoHeight: 1000 })) {
     vi.spyOn(HTMLVideoElement.prototype, name as "readyState", "get").mockReturnValue(value);
   }
@@ -180,7 +200,9 @@ async function advance(ms: number) {
   for (let elapsed = 0; elapsed < ms; elapsed += 100) {
     const step = Math.min(100, ms - elapsed);
     now += step;
-    await act(async () => fixtures.landmarks?.(currentHands));
+    await act(async () => fixtures.landmarks?.(
+    currentHands.map((landmarks) => ({ landmarks, handedness: "Right" as const })),
+  ));
     await frame();
     await act(async () => { await vi.advanceTimersByTimeAsync(step); });
   }
@@ -199,7 +221,9 @@ async function keys(...xs: number[]) {
   const hand = Array.from({ length: 21 }, () => ({ x: -10, y: -10 }));
   for (let i = 0; i < xs.length; i++) hand[[4, 8, 12, 16, 20][i]] = { x: xs[i] / 1000, y: 0.5 };
   currentHands = xs.length ? [hand] : [];
-  await act(async () => fixtures.landmarks?.(currentHands));
+  await act(async () => fixtures.landmarks?.(
+    currentHands.map((landmarks) => ({ landmarks, handedness: "Right" as const })),
+  ));
   await frame();
 }
 
@@ -363,7 +387,9 @@ it("ignores repeated Play while audio is starting", async () => {
 
 it("highlights accepted notes through recording Stop and clears them on interruption", async () => {
   await keys(115);
-  expect(fixtures.highlight).not.toHaveBeenCalled();
+  // Since #148, contact highlights keys before any session starts.
+  expect(fixtures.highlight).toHaveBeenCalled();
+  fixtures.highlight.mockClear();
   await start();
   await advance(0);
   expect(fixtures.highlight).toHaveBeenCalled();
@@ -376,7 +402,7 @@ it("highlights accepted notes through recording Stop and clears them on interrup
   fixtures.highlight.mockClear();
   await keys(115, 225);
   await advance(100);
-  expect(fixtures.highlight).not.toHaveBeenCalled();
+  // Contact feedback still highlights; the interrupted session records nothing.
   expect(fixtures.takes.at(-1)!.notes).toHaveLength(1);
 });
 

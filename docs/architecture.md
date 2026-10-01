@@ -168,8 +168,8 @@ future tooling, not an existing dependency.
 Use [AGENTS.md checks](../AGENTS.md#checks-to-run) and
 [test commands/layout](../tests/README.md#running-the-tests). Frontend tests,
 helpers and fixtures go in `tests/frontend/`, runner configuration in
-`frontend/`. A workflow's existence does not prove tests ran; D3's Vitest CI
-gap is not fixed here. Hardware checks explicitly skip when unavailable.
+`frontend/`. A workflow's existence does not prove tests ran; `frontend-ci.yml`
+runs Vitest (D3, #152), but each row needs its own Actions evidence. Hardware checks explicitly skip when unavailable.
 Critical manual tests use the manual report template.
 
 ## Accuracy and latency verification
