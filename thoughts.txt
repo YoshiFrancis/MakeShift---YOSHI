@@ -10,3 +10,10 @@ support more octaves
 get a smaller piano sheet
 could i do kmeans clustering using the gpu somehow since its just counting and adding?
 fix calibration phase and add the left hand
+i got to look out for jittering
+a finger can only press one key at a time
+
+i should favor getting quicker notes, and when releasing, i can have slower releases to ensure i do release since sound echoes
+for velocity, to help with prediction, i am thinking of keeping a history, perhaps the past 10 velocities, and if the rate of change suddenly stops, it can be triggered as a press but should be checked right away by shadows!
+- the challenge with predicting is having false positives; we dont want the user to hear a weird sound for a very short period. 
+- if only the shadows were faster! we can have priority on the shadows with these velocity stops tho, maybe that would help alleviate pains

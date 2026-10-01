@@ -4,6 +4,9 @@ Working checklist based on `CodexThoughts.md` and the current prototype.
 Delete items as they are completed. This document records planned work only;
 it does not establish measured accuracy or latency.
 
+See the [contact state machine proposal](contact_state_machine.md) for the
+planned per-finger press and release states.
+
 ## Direction
 
 - [ ] Deprioritize joint curvature for the current front-facing camera angle:
