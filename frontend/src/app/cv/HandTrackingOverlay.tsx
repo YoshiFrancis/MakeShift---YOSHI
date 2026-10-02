@@ -7,13 +7,14 @@ import type {
   NormalizedLandmark,
 } from "../../cv/collision";
 import {
+  pipelineMetrics,
+  acquireResource,
   recordCameraFrame,
   recordHandInference,
-} from "../../cv/performanceMetrics";
+} from "../../diagnostics/performanceMetrics";
 import { drawHandLandmarks } from "./handLandmarkDrawing";
+import { WASM_PATH as VISION_WASM_PATH } from "../useHandLandmarker";
 
-const VISION_WASM_PATH =
-  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm";
 
 export default function HandTrackingOverlay({
   videoRef,
@@ -44,6 +45,7 @@ export default function HandTrackingOverlay({
     let cancelled = false;
     let animationFrame = 0;
     let handLandmarker: HandLandmarker | null = null;
+    let releaseModel: (() => void) | undefined;
     let lastHandCount = -1;
     let lastVideoTime = -1;
     let fpsStartTimestamp = 0;
@@ -67,7 +69,7 @@ export default function HandTrackingOverlay({
 
       if (!cancelled && video && canvas && video.readyState >= 2 && video.currentTime !== lastVideoTime) {
         lastVideoTime = video.currentTime;
-        recordCameraFrame(performance.now());
+        if (pipelineMetrics.enabled) recordCameraFrame(performance.now());
         if (
           canvas.width !== video.videoWidth ||
           canvas.height !== video.videoHeight
@@ -77,7 +79,7 @@ export default function HandTrackingOverlay({
         }
 
         const context = showVisualDebugRef.current ? canvas.getContext("2d") : null;
-        const inferenceStartedAt = performance.now();
+        const inferenceStartedAt = pipelineMetrics.enabled ? performance.now() : null;
         let result;
         try {
           result = handLandmarker?.detectForVideo(video, timestamp);
@@ -86,7 +88,7 @@ export default function HandTrackingOverlay({
           setStatus("Tracking failed. Reload to retry.");
           return;
         }
-        if (result) {
+        if (result && inferenceStartedAt !== null) {
           recordHandInference(performance.now() - inferenceStartedAt);
         }
         if (context) {
@@ -168,6 +170,7 @@ export default function HandTrackingOverlay({
         }
 
         handLandmarker = createdHandLandmarker;
+        releaseModel = acquireResource("handModels");
         setStatus(`MediaPipe ready (${delegate})`);
         animationFrame = requestAnimationFrame(processFrame);
       } catch (error) {
@@ -183,6 +186,8 @@ export default function HandTrackingOverlay({
       cancelled = true;
       cancelAnimationFrame(animationFrame);
       handLandmarker?.close();
+      releaseModel?.();
+      pipelineMetrics.endFrameStream();
     };
   }, [onLandmarks, onTrackingFailure, videoRef]);
 

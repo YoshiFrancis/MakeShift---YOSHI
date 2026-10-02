@@ -1,5 +1,7 @@
 "use client";
 
+import { acquireResource } from "../diagnostics/performanceMetrics";
+
 import {
   createContext,
   useCallback,
@@ -13,6 +15,7 @@ export type CameraErrorKind =
   | "permission-denied"
   | "no-device"
   | "device-in-use"
+  | "disconnected"
   | "unsupported"
   | "unknown";
 
@@ -121,6 +124,14 @@ function describeError(err: unknown): CameraError {
   }
 }
 
+/** Shown when a live track ends: unplugged device or permission revoked. */
+const DISCONNECTED_ERROR: CameraError = {
+  kind: "disconnected",
+  title: "Camera disconnected",
+  detail:
+    "The camera stopped sending video. Reconnect it or re-allow access, then try again.",
+};
+
 export function CameraProvider({ children }: { children: React.ReactNode }) {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [status, setStatus] = useState<CameraStatus>("requesting");
@@ -138,6 +149,7 @@ export function CameraProvider({ children }: { children: React.ReactNode }) {
     // so a slow rejection cannot overwrite a newer successful stream.
     let cancelled = false;
     let acquired: MediaStream | null = null;
+    const releases: (() => void)[] = [];
 
     requestCameraStream()
       .then((s) => {
@@ -146,6 +158,19 @@ export function CameraProvider({ children }: { children: React.ReactNode }) {
           s.getTracks().forEach((t) => t.stop());
           return;
         }
+        s.getTracks().forEach(t => {
+          const release = acquireResource("mediaTracks");
+          t.addEventListener("ended", release, { once: true });
+          releases.push(() => { t.removeEventListener("ended", release); release(); });
+        });
+        s.getVideoTracks().forEach((track) =>
+          track.addEventListener("ended", () => {
+            if (cancelled) return;
+            setStream(null);
+            setError(DISCONNECTED_ERROR);
+            setStatus("error");
+          }),
+        );
         setStream(s);
         setStatus("ready");
       })
@@ -158,6 +183,7 @@ export function CameraProvider({ children }: { children: React.ReactNode }) {
 
     const stopTracks = () => {
       acquired?.getTracks().forEach((t) => t.stop());
+      releases.forEach(release => release());
     };
     window.addEventListener("beforeunload", stopTracks);
 

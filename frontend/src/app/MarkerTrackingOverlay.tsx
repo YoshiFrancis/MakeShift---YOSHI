@@ -45,9 +45,9 @@ import type { MarkerDetectionResult } from "../cv/types";
 import type { Point } from "../cv/types";
 import { keyIndexToMidi } from "../cv/noteMap";
 import {
-  recordKeyTransitions,
   recordMarkerDetection,
-} from "../cv/performanceMetrics";
+  pipelineMetrics,
+} from "../diagnostics/performanceMetrics";
 
 const PAGE_CORNERS: Point[] = [
   { x: 0, y: 0 },
@@ -196,10 +196,6 @@ export default function MarkerTrackingOverlay({
       currentKeys,
     );
     previousKeysRef.current = currentKeys;
-    recordKeyTransitions(
-      transitions.pressed.length,
-      transitions.released.length,
-    );
     if (transitions.pressed.length || transitions.released.length) {
       onKeyTransitionsRef.current?.(transitions.pressed, transitions.released);
     }
@@ -412,12 +408,11 @@ export default function MarkerTrackingOverlay({
                   processingCanvas.width,
                   processingCanvas.height,
                 );
-                const detectionStartedAt = performance.now();
+                const detectionStartedAt = pipelineMetrics.enabled ? performance.now() : null;
                 try {
                   const detection = detector.detect(processingCanvas);
-                  recordMarkerDetection(
+                  if (detectionStartedAt !== null) recordMarkerDetection(
                     performance.now() - detectionStartedAt,
-                    detection.missingIds.length === 0,
                   );
                   markerDetectionRef.current = detection;
                   setMarkerDetection(detection);
@@ -542,6 +537,7 @@ export default function MarkerTrackingOverlay({
     if (!pipeline) return;
     const video = videoRef.current;
     // The complete live pipeline runs here: overlap -> knuckles -> shadows.
+    const detectionStartedAt = pipelineMetrics.enabled ? performance.now() : null;
     const capturedShadowFrame = pipeline.processFrame({
       video,
       fingertips,
@@ -550,6 +546,9 @@ export default function MarkerTrackingOverlay({
       calibration: depthCalibration,
       previewFingerId: shadowPreviewFinger?.id ?? null,
     });
+    if (detectionStartedAt !== null) {
+      pipelineMetrics.record("detection", performance.now() - detectionStartedAt);
+    }
 
     const nextDebug: FingerDebugState[] = [];
     if (showVisualDebug)

@@ -1,3 +1,4 @@
+import { acquireResource, trackAudioContext, closeTrackedAudioContext } from "../../diagnostics/performanceMetrics";
 export type AudioStatus = "idle" | "loading" | "ready" | "suspended" | "error";
 type AudioCommand =
   | { type: "reset" | "release-all"; session: number }
@@ -12,6 +13,7 @@ type AudioCommand =
 
 /** Owns one context. Call initialize only from a user gesture. */
 export class BrowserAudio {
+  private releaseNode: (() => void) | undefined;
   private context: AudioContext | null = null;
   private node: AudioWorkletNode | null = null;
   private initializing: Promise<void> | null = null;
@@ -72,7 +74,7 @@ export class BrowserAudio {
     this.error = "";
     try {
       if (!this.context || this.context.state === "closed") {
-        this.context = new AudioContext({ latencyHint: "interactive" });
+        this.context = trackAudioContext(new AudioContext({ latencyHint: "interactive" }));
       }
       const context = this.context;
       // Invoke resume before any await to retain user activation.
@@ -91,6 +93,7 @@ export class BrowserAudio {
           outputChannelCount: [2],
         });
         this.node = node;
+        this.releaseNode = acquireResource("audioNodes");
         this.outstanding = 0;
         this.recovering = false;
         node.port.onmessage = ({ data }) => {
@@ -105,6 +108,7 @@ export class BrowserAudio {
           this.error = "Audio processing failed. Select Enable audio to retry.";
           node.disconnect();
           node.port.close();
+          this.releaseNode?.();
           if (this.node === node) this.node = null;
           this.outstanding = 0;
           this.recovering = false;
@@ -126,13 +130,14 @@ export class BrowserAudio {
         error instanceof Error ? error.message : "Audio initialization failed.";
       this.node?.disconnect();
       this.node?.port.close();
+      this.releaseNode?.();
       this.node = null;
       this.invalidate();
       const context = this.context;
       this.context = null;
       if (context) {
         context.onstatechange = null;
-        await context.close().catch(() => {});
+        await closeTrackedAudioContext(context).catch(() => {});
       }
       throw new Error(this.error);
     }
@@ -191,13 +196,14 @@ export class BrowserAudio {
     this.initializing = null;
     this.node?.disconnect();
     this.node?.port.close();
+    this.releaseNode?.();
     this.node = null;
     this.invalidate();
     const context = this.context;
     this.context = null;
     if (context) {
       context.onstatechange = null;
-      await context.close();
+      await closeTrackedAudioContext(context);
     }
     if (generation !== this.generation) return;
     this.status = "idle";

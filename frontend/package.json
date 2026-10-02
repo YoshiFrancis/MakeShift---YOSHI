@@ -10,10 +10,13 @@
     "test": "vitest",
     "test:contrast": "node ../tests/frontend/check-contrast.mjs",
     "test:audio-browser": "node ../tests/frontend/browserAudio.browser.mjs",
-    "test:midi-browser": "node ../tests/frontend/midiExport.browser.mjs"
+    "test:midi-browser": "node ../tests/frontend/midiExport.browser.mjs",
+    "test:performance-browser": "node ../tests/frontend/performanceMetrics.browser.mjs",
+    "test:deployment": "node ../tests/frontend/deployment.browser.mjs",
+    "test:layout-browser": "node ../tests/frontend/cameraLayout.browser.mjs"
   },
   "dependencies": {
-    "@mediapipe/tasks-vision": "^0.10.34",
+    "@mediapipe/tasks-vision": "0.10.34",
     "@techstark/opencv-js": "^5.0.0-release.1",
     "midi-writer-js": "^3.2.1",
     "next": "16.2.3",

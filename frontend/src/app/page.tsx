@@ -1,5 +1,7 @@
 "use client";
 
+import { registerCameraVideo } from "../diagnostics/cameraVideo";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
@@ -12,6 +14,7 @@ import {
   type Recorder,
   type Recording,
 } from "./midi/midiUtils";
+import { trackAudioContext, closeTrackedAudioContext } from "../diagnostics/performanceMetrics";
 import { browserAudio } from "./audio/audioEngine";
 import { LiveSession } from "../events/liveSession";
 import { loadCalibration } from "../cv/calibration";
@@ -111,6 +114,7 @@ export default function Home() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
+  useEffect(() => registerCameraVideo(videoRef.current), []);
   const { stream, cameraReady } = useCamera();
   // Drives the calibration prompt; live readiness stays with the session.
   const [isCalibrated, setIsCalibrated] = useState(false);
@@ -135,7 +139,7 @@ export default function Home() {
 
   // ── Audio click (used only for count-in) ────────────────────────────────
   const playClick = useCallback((accent: boolean) => {
-    if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+    if (!audioCtxRef.current) audioCtxRef.current = trackAudioContext(new AudioContext());
     const ctx = audioCtxRef.current;
     if (ctx.state === "suspended") ctx.resume();
     const osc = ctx.createOscillator();
@@ -222,7 +226,7 @@ export default function Home() {
       disconnectNotes();
       consumersRef.current = null;
       recorder.stopRecording();
-      void audioCtxRef.current?.close();
+      if (audioCtxRef.current) void closeTrackedAudioContext(audioCtxRef.current);
       document.removeEventListener("visibilitychange", visibility);
       window.removeEventListener("pagehide", leave);
     };
@@ -441,9 +445,10 @@ export default function Home() {
           </div>
         </div>
       )}
-      <div className="flex flex-col lg:flex-row lg:flex-1 pt-4 lg:pt-[clamp(16px,calc(100dvh_-_700px),115px)] pl-[clamp(20px,4.2vw,61px)] pr-[clamp(12px,3.2vw,47px)] lg:pb-[clamp(16px,calc(100dvh_-_660px),226px)]">
-        {/* Camera feed */}
-        <div className="w-full aspect-video lg:w-auto lg:aspect-auto lg:flex-1 lg:min-h-[240px] bg-surface-dark relative overflow-hidden">
+      <div className="flex flex-col lg:flex-row pt-4 lg:pt-0 pl-[clamp(20px,4.2vw,61px)] pr-[clamp(12px,3.2vw,47px)]">
+        {/* Camera feed: 16:9 and sized like the calibration and about pages.
+            self-start keeps the taller sidebar from stretching it. */}
+        <div className="w-full lg:w-auto lg:flex-1 lg:self-start aspect-video bg-surface-dark relative overflow-hidden">
           <video
             ref={videoRef}
             autoPlay

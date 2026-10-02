@@ -13,7 +13,7 @@ MakeShift/
 │   └── workflows/
 │       ├── bypass-checks.yml        # no-op test/lint jobs for non-Python PRs
 │       ├── bypass-frontend.yml      # no-op frontend job for non-frontend PRs
-│       ├── frontend-ci.yml          # lint, type check, contrast audit, build
+│       ├── frontend-ci.yml          # lint, types, Vitest, contrast, build, browser smoke
 │       ├── linting.yml              # ruff, mypy, clang-format
 │       ├── preview.yml              # Vercel preview link for PRs labeled preview-link
 │       ├── rca.yml                  # validate RCA evidence; publish after merge
@@ -31,6 +31,7 @@ MakeShift/
 ├── docs/
 │   ├── architecture.md              # browser target, tooling, delivery boundaries
 │   ├── rvtm_browser_addendum.md      # browser requirement/test reconciliation
+│   ├── performance.md              # bounded pipeline metrics, clocks and profiling
 │   ├── browser_audio.md             # browser DSP, transport and verification
 │   ├── audio.md                     # polyphony and voice stealing
 │   ├── audio_events.md              # native audio event queue contract
@@ -41,6 +42,8 @@ MakeShift/
 │   ├── piano_sheet.md               # printable sheet and ArUco marker IDs
 │   ├── Piano Sheet.png
 │   ├── sdp.md
+│   ├── deployment.md                # Vercel hosting, browser support, permissions
+│   ├── supabase.md                  # recordings database, secrets, migrations
 │   ├── Design Document.pdf
 │   └── Final Verification and Validation Plan.pdf
 ├── frontend/
@@ -49,6 +52,7 @@ MakeShift/
 │   │   └── models/                  # MediaPipe hand landmarker model
 │   ├── src/
 │   │   ├── app/
+│   │   │   ├── api/health/          # recordings database health route
 │   │   │   ├── audio/                  # browser owner and Audio check page
 │   │   │   ├── about/
 │   │   │   ├── calibration/
@@ -56,6 +60,7 @@ MakeShift/
 │   │   │   ├── documentation/
 │   │   │   ├── midi/                # MIDI recording utils
 │   │   │   ├── tutorial/
+│   │   │   ├── PipelineDiagnostics.tsx # opt-in metrics and report export
 │   │   │   ├── CameraContext.tsx
 │   │   │   ├── CameraStatusOverlay.tsx
 │   │   │   ├── MarkerTrackingOverlay.tsx
@@ -72,13 +77,18 @@ MakeShift/
 │   │   │   ├── shadowHeuristics.ts   # prototype RGB k-means dark-region segmentation
 │   │   │   └── shadowWorker.ts       # bounded background shadow segmentation
 │   │   ├── events/                  # shared schema, clocks, session and audio adapter
-│   │   └── shims/                # empty fs shim and type-only MIDI declaration bridge
+│   │   ├── lib/                     # shared browser utilities (versioned storage)
+│   │   ├── server/                  # server-only Supabase access
+│   │   └── shims/                   # empty fs shim and type-only MIDI declaration bridge
 │   ├── package.json
 │   ├── package-lock.json
 │   ├── vitest.config.mts            # discovers tests/frontend/
 │   ├── tsconfig.json
 │   ├── next.config.ts
 │   └── README.md
+├── supabase/
+│   ├── config.toml                  # Supabase CLI project config
+│   └── migrations/                  # SQL migrations (recordings table)
 ├── tests/
 │   ├── README.md                    # commands, known defects, RCA log
 │   ├── verification_test_inventory.md
@@ -88,21 +98,29 @@ MakeShift/
 │   ├── automation/
 │   │   └── rca.test.cjs             # RCA parser, validation, publication tests
 │   ├── frontend/
+│   │   ├── performanceMetrics.test.ts # bounded aggregation, clocks and resource counts
+│   │   ├── performanceResources.test.tsx # camera provider lifecycle accounting
+│   │   ├── performanceMetrics.browser.mjs # profiles and paired overhead
 │   │   ├── browserAudio.test.ts      # production DSP offline rendering
 │   │   ├── browserAudioLifecycle.test.ts # browser owner mocks
 │   │   ├── browserAudio.browser.mjs  # production browser graph check
+│   │   ├── deployment.browser.mjs    # production assets, camera recovery, offline playing
 │   │   ├── homePage.test.ts
+│   │   ├── supabaseHealth.test.ts    # /api/health database check
 │   │   ├── pianoIntegration.test.ts # deterministic note-to-audio/MIDI/feedback
 │   │   ├── liveSession.test.ts       # readiness transitions and stale-input safety
 │   │   ├── noteEvents.test.ts        # shared events, lifecycle, clocks and MessagePort
 │   │   ├── midiExport.browser.mjs  # production Export UI and downloaded MIDI bytes
+│   │   ├── cameraLayout.browser.mjs # home camera feed 16:9 across viewports
 │   │   ├── midiUtils.test.ts
+│   │   ├── storage.test.ts           # versioned localStorage module
 │   │   └── check-contrast.mjs
 │   ├── python/
 │   │   └── test_dummy.py
 │   └── manual/                     # manual test template and completed reports
 ├── .clang-format
 ├── .gitignore
+├── .infisical.json                  # Infisical project ID (no secrets)
 ├── AGENTS.md                        # contributor and coding agent instructions
 ├── CLAUDE.md                        # points to AGENTS.md
 ├── LICENSE

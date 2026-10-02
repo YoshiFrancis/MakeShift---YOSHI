@@ -1,3 +1,4 @@
+import { acquireResource } from "../diagnostics/performanceMetrics";
 import cvModule from "@techstark/opencv-js";
 import type { MarkerDetectionResult, MarkerObservation, Point } from "./types";
 
@@ -94,6 +95,7 @@ function observationFrom(corner: CvMat, id: number): MarkerObservation {
 }
 
 export class MarkerDetector {
+  private releaseResource = acquireResource("markerDetectors");
   private constructor(
     private readonly cv: CvRuntime,
     private readonly detector: CvDetector,
@@ -152,5 +154,6 @@ export class MarkerDetector {
 
   dispose(): void {
     this.detector.delete();
+    this.releaseResource();
   }
 }

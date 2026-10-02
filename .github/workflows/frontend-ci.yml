@@ -56,3 +56,31 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+
+      # ubuntu-latest already provides Chromium's system libraries.
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
+
+      - name: Start production server
+        run: |
+          npm start -- -p 3000 > next-start.log 2>&1 &
+          for i in $(seq 1 60); do
+            curl -sf -o /dev/null http://127.0.0.1:3000/ && exit 0
+            sleep 1
+          done
+          cat next-start.log
+          exit 1
+
+      - name: Deployment smoke test
+        run: npm run test:deployment
+
+      - name: Browser audio smoke test
+        env:
+          AUDIO_BROWSER_CHANNEL: chromium
+        run: npm run test:audio-browser
