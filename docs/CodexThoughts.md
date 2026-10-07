@@ -54,6 +54,32 @@ to be idempotent across sessions or users. A local calibrated residual and
 temporal hysteresis are more defensible than interpreting `z` as height above
 the paper.
 
+**Current status:** MediaPipe fingertip `z` is captured by the depth calibration
+flow and persisted in per-finger `zLines`, but it is not currently used by the
+live contact pipeline to predict or trigger state transitions. The separate
+contact-score experiment has a z-boundary heuristic, but that experiment is not
+the live note path. The live path currently uses key overlap, knuckle
+eligibility, and asynchronous shadow results.
+
+**Proposed z-motion predictor:** Use each fingertip's own MediaPipe `z` history
+as early evidence for note-on. While the fingertip is over a key and passes the
+knuckle eligibility gate, predict a press when its z is sufficiently far into
+the calibrated press range and it has moved downward by a satisfactory delta
+over a short time window. Treat that prediction as an early note-on candidate;
+fresh shadow evidence should confirm it shortly afterward. The calibration
+logs should establish the observed z direction and useful absolute and delta
+ranges before thresholds are chosen. In particular, earlier observations
+reported z increasing during downward movement, while the proposed absolute
+gate is described as z becoming low enough; resolve the sign/convention from
+the experiment logs rather than assuming either interpretation.
+
+Track history independently for each fingertip and timestamp observations so
+the delta is tied to elapsed time, not just frame count. On tracking loss,
+discard that finger's history. Recovery starts a fresh history; the existing
+shadow path remains available to detect contact after recovery. Keep the z
+signal as a predictor with a bounded confirmation window, rather than treating
+relative z as a metric distance to the paper.
+
 ### Knuckle-distance depth estimate
 
 Knuckle distance should be treated as a second depth signal alongside
@@ -211,11 +237,11 @@ No single feature should trigger a note. In particular, knuckle scale and
 shadow change should increase confidence only when they agree with fingertip
 location and a plausible press trajectory.
 
-## Implemented contact-score interface
+## Implemented contact-score interface (separate from live path)
 
-The score is implemented as a modular interface. Each heuristic returns a
-confidence value, a weight, and whether its input is available. The current
-heuristic file contains separate entries for:
+The score experiment is implemented as a modular interface. Each heuristic
+returns a confidence value, a weight, and whether its input is available. The
+current heuristic file contains separate entries for:
 
 - key overlap;
 - the `z` boundary;
@@ -227,7 +253,9 @@ heuristic file contains separate entries for:
 The score requires key overlap and at least one supporting heuristic. Missing
 heuristics are skipped rather than treated as evidence against a press. This
 lets each model be implemented and tuned independently while the score keeps
-the same interface.
+the same interface. This interface is not currently connected to the live
+contact state machine; in particular, neither its z-boundary nor motion
+heuristic currently predicts live note-on.
 
 The current shape is:
 
