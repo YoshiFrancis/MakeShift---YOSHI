@@ -4,42 +4,36 @@ Working checklist based on `CodexThoughts.md` and the current prototype.
 Delete items as they are completed. This document records planned work only;
 it does not establish measured accuracy or latency.
 
-## Direction
+## Z-calibrated early press prediction
 
-- [x] Deprioritize joint curvature for the current front-facing camera angle:
-  curved and flat fingers appeared too similar in the user's observations.
-  Keep knuckles as a permissive eligibility gate and shadows as contact
-  confirmation.
+MediaPipe fingertip z is not currently used by the live contact pipeline.
+The intended role is to predict note-on from calibrated per-finger depth and
+downward movement, then use shadow evidence to confirm the press shortly after
+the sound starts.
 
-## Shadow scheduling
-
-Shadow analysis now runs only for fingers over a key and inside the knuckle
-playing zone. A selected debug preview can request one additional diagnostic
-crop without allowing that finger to activate a note.
-
-- [x] Calculate key overlap and knuckle eligibility before capturing pixels.
-- [x] Submit only fingers with key overlap and valid knuckle eligibility.
-  If visual debugging needs an ineligible index-finger preview, keep that
-  request explicitly diagnostic so it cannot activate a note.
-- [x] Skip shadow capture entirely when no fingers need analysis or a preview.
-- [x] Compute shared knuckle distance once per hand and reuse it per finger.
-- [x] Reset shadow measurement and peak history when eligibility is lost, so
-  an old baseline is not reused when the finger re-enters the playing zone.
-- [x] Continue sampling eligible held fingers so shadow recovery can release
-  notes. Preserve immediate release on lost eligibility, freshness timeouts,
-  gate revisions, and rejection of stale worker results.
-
-## Pixel transfer — after scheduling
-
-- [x] Extract and transfer only the required 140×140 fingertip crops instead
-  of reading and transferring the full camera frame for shadow analysis.
-- [x] Preserve crop coordinates, out-of-frame behavior, and a matching camera
-  preview from the same snapshot when debugging is enabled.
-- [x] Keep crop size, clustering, cutoff, contour selection, and contact
-  thresholds unchanged initially, including the 30% relative-area rule and
-  below-300-pixel absolute-area fallback.
-- [x] Preserve the one-in-flight-job limit; skip pending work rather than
-  building a frame queue.
+- [ ] Inspect the existing depth calibration data and confirm it records a
+  MediaPipe fingertip z value for every finger at each calibration position,
+  aligned with the corresponding knuckle depth/reference. If it does not,
+  extend the capture flow using the same position-by-position process as the
+  knuckle measurements.
+- [ ] Build or update per-finger `zLines` from those calibration samples so
+  they provide a z boundary at each calibrated position/depth. Give the z
+  boundary a tighter tolerance than the knuckle eligibility boundary.
+- [ ] Use the saved experiment logs and clearly labeled trials to establish
+  the z direction, per-finger movement delta, and calibrated boundary needed
+  for prediction. Do not assume one threshold fits every finger.
+- [ ] Track a short, timestamped z history for each fingertip. While key
+  overlap and knuckle eligibility pass, predict a press when z trends
+  downward by a sufficient delta and crosses the calibrated z boundary.
+- [ ] Trigger note-on once when the z prediction passes. Require fresh shadow
+  evidence to confirm shortly afterward; if confirmation does not arrive in
+  the bounded confirmation window, send note-off and cancel the prediction.
+- [ ] Clear the fingertip's z history on tracking loss. Cancel a pending
+  prediction if tracking, key overlap, or knuckle eligibility is lost, and
+  start with fresh z samples after tracking recovers.
+- [ ] Evaluate the predictor across fingers and labeled hover, approach,
+  contact, and release trials. Measure early-trigger timing, unconfirmed
+  predictions, missed presses, and duplicate note-ons before tuning thresholds.
 
 ## Deferred experiments
 
@@ -55,3 +49,8 @@ crop without allowing that finger to activate a note.
 
 Do not edit tests or `tests/verification_test_inventory.md` as part of this
 requested work.
+
+
+## calibrate for left hand
+
+## a finger should trigger one key maximum
