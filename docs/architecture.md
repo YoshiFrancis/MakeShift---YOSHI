@@ -33,7 +33,7 @@ flowchart TD
 | Area | Existing implementation | Planned delivery |
 | :--- | :--- | :--- |
 | UI/camera | Next.js/React camera and calibration UI | Validated session lifecycle (#24, #87) |
-| CV | MediaPipe still-image helper, video overlay code, OpenCV.js marker/geometry modules; bounded k-means shadow worker and main-thread per-finger overlap/relaxed-knuckle/shadow contact prototype (combined camera behavior unverified) | Complete worker pipeline and validated intentional contact detection (#37, #34); prototype transitions are dispatched independently of diagnostic drawing |
+| CV | MediaPipe still-image helper, video overlay code, OpenCV.js marker/geometry modules; bounded k-means shadow worker and main-thread contact prototype with per-finger z-predicted note-on and shadow confirmation when knuckle/shadow switches are enabled (both currently disabled; combined camera behavior unverified) | Complete worker pipeline and validated intentional contact detection (#37, #34); prototype transitions are dispatched independently of diagnostic drawing |
 | Calibration | Prototype flow/completion flag; known defect D6 | Versioned validated result (#87) |
 | Native audio | C++ PortAudio, nanobind, SPSC queue; ten 100 ms decaying sine hits at 44.1 kHz | Remains a native reference |
 | Browser audio | JavaScript AudioWorklet, ten held sine voices, press/session identities, velocity, sample-timed ADSR and Audio check page ([details](browser_audio.md)); native engine preserved | Shared event adapter (#86) implemented; ADSR (#27) implemented with user-reported listening pass; live readiness/wiring (#24, #28) |

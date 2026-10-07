@@ -1,5 +1,6 @@
 import {
   CONTACT_RELEASE_GRACE_MS,
+  CONTACT_PREDICTION_CONFIRMATION_MS,
   CONTACT_SHADOW_MAX_AGE_MS,
   type FingerContactEvaluation,
   type FingerContactGate,
@@ -9,6 +10,7 @@ import type { ShadowContactState } from "./shadowHeuristics";
 
 interface FingerCheckOptions {
   shadowsEnabled?: boolean;
+  zMotionPredicted?: boolean;
 }
 
 interface ShadowObservation {
@@ -23,6 +25,7 @@ export class Finger {
   private nowMs = 0;
   private observation?: ShadowObservation;
   private shadowsEnabled = true;
+  private zMotionPredicted = false;
   private freshObservation = false;
 
   constructor(readonly id: string) {}
@@ -38,6 +41,7 @@ export class Finger {
     this.nowMs = nowMs;
     this.observation = observation;
     this.shadowsEnabled = options.shadowsEnabled !== false;
+    this.zMotionPredicted = options.zMotionPredicted === true;
     this.freshObservation = Boolean(
       observation &&
         Number.isFinite(observation.frameAtMs) &&
@@ -50,6 +54,8 @@ export class Finger {
     switch (this.contact?.state) {
       case "pressed":
         return this.handlePressed();
+      case "predicted":
+        return this.handlePredicted();
       case "releasing":
         return this.handleReleasing();
       case "ready":
@@ -77,6 +83,35 @@ export class Finger {
     return this.startOrContinueRelease(frameAtMs);
   }
 
+  handlePredicted(): FingerContactEvaluation {
+    if (!this.gateAvailable()) return this.enterUnavailable();
+    if (!this.canContact()) return this.enterHover();
+    if (!this.shadowsEnabled) return this.keepPressedIfLandmarksFresh();
+
+    const frameAtMs = this.currentShadowFrameAtMs();
+    if (
+      frameAtMs !== null &&
+      !this.shadowIsStale(frameAtMs) &&
+      this.shadowState() === "press candidate"
+    ) {
+      return this.enterPressed(frameAtMs);
+    }
+
+    const predictionStartedAtMs = this.contact?.predictionStartedAtMs;
+    if (
+      predictionStartedAtMs !== null &&
+      predictionStartedAtMs !== undefined &&
+      this.nowMs - predictionStartedAtMs >=
+        CONTACT_PREDICTION_CONFIRMATION_MS
+    ) {
+      // The predicted note was not confirmed. Becoming inactive sends its
+      // note-off through the normal key-transition path.
+      return this.enterReady();
+    }
+
+    return this.staySame("predicted", frameAtMs);
+  }
+
   handleReleasing(): FingerContactEvaluation {
     if (!this.gateAvailable()) return this.enterUnavailable();
     if (!this.canContact()) return this.enterHover();
@@ -102,6 +137,7 @@ export class Finger {
     if (!this.gateAvailable()) return this.enterUnavailable();
     if (!this.canContact()) return this.enterHover();
     if (!this.shadowsEnabled) return this.keepPressedIfLandmarksFresh();
+    if (this.zMotionPredicted) return this.enterPredicted();
 
     const frameAtMs = this.currentShadowFrameAtMs();
     if (frameAtMs === null) return this.staySame("ready");
@@ -136,6 +172,7 @@ export class Finger {
     this.gate = null;
     this.observation = undefined;
     this.freshObservation = false;
+    this.zMotionPredicted = false;
   }
 
   private gateAvailable(): boolean {
@@ -200,6 +237,19 @@ export class Finger {
       shadow: this.shadowState(),
       shadowFrameAtMs: frameAtMs,
       releaseStartedAtMs: null,
+      predictionStartedAtMs: null,
+    };
+    return this.contact;
+  }
+
+  private enterPredicted(): FingerContactEvaluation {
+    this.contact = {
+      state: "predicted",
+      active: true,
+      shadow: this.shadowState(),
+      shadowFrameAtMs: this.currentShadowFrameAtMs(),
+      releaseStartedAtMs: null,
+      predictionStartedAtMs: this.nowMs,
     };
     return this.contact;
   }
@@ -213,6 +263,7 @@ export class Finger {
       shadow: frameAtMs === null ? "unknown" : this.shadowState(),
       shadowFrameAtMs: frameAtMs,
       releaseStartedAtMs: null,
+      predictionStartedAtMs: null,
     };
     return this.contact;
   }

@@ -87,6 +87,7 @@ export default function CVOverlayCoordinator({
         hands={hands}
         depthCalibration={depthCalibration}
         showVisualDebug={DEBUG_FLAGS.visualDebug}
+        debugShowZLines={DEBUG_FLAGS.showZLines}
         debugShowSheetWithoutCalibration={DEBUG_FLAGS.showSheetWithoutCalibration}
         activePitches={activePitches}
         onKeyTransitions={handleKeyTransitions}

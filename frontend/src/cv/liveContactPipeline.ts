@@ -18,6 +18,11 @@ import {
   getKnuckleDistance,
   type PersistedDepthCalibration,
 } from "./depthCalibration";
+import {
+  evaluateZMotionPrediction,
+  Z_MOTION_HISTORY_WINDOW_MS,
+  type ZMotionSample,
+} from "./zMotionPrediction";
 import type {
   ShadowContactEvaluation,
   ShadowMeasurement,
@@ -68,6 +73,8 @@ export class LiveContactPipeline {
   readonly observations = new Map<string, ShadowObservation>();
   readonly shadowContacts = new Map<string, ShadowContactEvaluation>();
   private readonly measurements = new Map<string, ShadowMeasurement>();
+  private readonly zHistories = new Map<string, ZMotionSample[]>();
+  private readonly zPredictionLatched = new Set<string>();
   private worker: Worker | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
   private disposed = false;
@@ -106,6 +113,8 @@ export class LiveContactPipeline {
           this.measurements.clear();
           this.observations.clear();
           this.shadowContacts.clear();
+          this.zHistories.clear();
+          this.zPredictionLatched.clear();
           this.contacts.clear();
           this.callbacks.onContactsChanged();
           this.callbacks.onError(
@@ -146,6 +155,8 @@ export class LiveContactPipeline {
     this.measurements.clear();
     this.observations.clear();
     this.shadowContacts.clear();
+    this.zHistories.clear();
+    this.zPredictionLatched.clear();
     // Keep revisions monotonic so pending results cannot enter a new session.
     this.callbacks.onContactsChanged();
   }
@@ -228,6 +239,53 @@ export class LiveContactPipeline {
         previousGate?.available !== available ||
         previousGate?.knuckleEligible !== knuckleEligible;
 
+      let zMotionPredicted = false;
+      const fingertipZ = hand.landmarks[fingertip.landmarkIndex]?.z;
+      const canEvaluateZMotion = Boolean(
+        this.techniques.knuckles &&
+          this.techniques.shadows &&
+          frame.calibration &&
+          keyOverlap &&
+          knuckleEligible &&
+          screenY !== null &&
+          fingertipZ !== undefined &&
+          Number.isFinite(fingertipZ),
+      );
+      if (!canEvaluateZMotion || gateChanged) {
+        this.zHistories.delete(fingertip.id);
+        this.zPredictionLatched.delete(fingertip.id);
+      }
+      if (
+        canEvaluateZMotion &&
+        screenY !== null &&
+        fingertipZ !== undefined &&
+        frame.calibration
+      ) {
+        const finger = DEPTH_FINGERS[fingerIndex];
+        const history = this.zHistories.get(fingertip.id) ?? [];
+        const prediction = evaluateZMotionPrediction({
+          history,
+          zLine: frame.calibration.zLines[finger],
+          current: { timestampMs: now, z: fingertipZ, sheetY: screenY },
+          historyWindowMs: Z_MOTION_HISTORY_WINDOW_MS,
+        });
+        if (!prediction.boundaryCrossed)
+          this.zPredictionLatched.delete(fingertip.id);
+        zMotionPredicted = Boolean(
+          this.techniques.shadows &&
+            prediction.predicted &&
+            !this.zPredictionLatched.has(fingertip.id),
+        );
+        if (zMotionPredicted) this.zPredictionLatched.add(fingertip.id);
+
+        const cutoffMs = now - Z_MOTION_HISTORY_WINDOW_MS;
+        history.push({ timestampMs: now, z: fingertipZ });
+        this.zHistories.set(
+          fingertip.id,
+          history.filter((sample) => sample.timestampMs >= cutoffMs),
+        );
+      }
+
       const gate: FingerContactGate = {
         available,
         keyIndexes,
@@ -256,7 +314,10 @@ export class LiveContactPipeline {
         gate,
         now,
         undefined,
-        { shadowsEnabled: this.techniques.shadows },
+        {
+          shadowsEnabled: this.techniques.shadows,
+          zMotionPredicted,
+        },
       );
       this.contacts.set(fingertip.id, contact);
 
@@ -269,6 +330,8 @@ export class LiveContactPipeline {
       this.observations,
       this.shadowContacts,
       this.fingers,
+      this.zHistories,
+      this.zPredictionLatched,
     ]) {
       for (const id of map.keys()) if (!activeIds.has(id)) map.delete(id);
     }

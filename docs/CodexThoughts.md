@@ -54,31 +54,25 @@ to be idempotent across sessions or users. A local calibrated residual and
 temporal hysteresis are more defensible than interpreting `z` as height above
 the paper.
 
-**Current status:** MediaPipe fingertip `z` is captured by the depth calibration
-flow and persisted in per-finger `zLines`, but it is not currently used by the
-live contact pipeline to predict or trigger state transitions. The separate
-contact-score experiment has a z-boundary heuristic, but that experiment is not
-the live note path. The live path currently uses key overlap, knuckle
-eligibility, and asynchronous shadow results.
+**Current status:** MediaPipe fingertip `z` is captured during depth
+calibration. The persisted per-finger `zLines` map fingertip z to expected
+sheet Y; they are calibrated z-dependent position boundaries, not metric
+contact-depth values. The live controller now has a per-finger z history and a
+predicted-contact state. With knuckle and shadow techniques enabled, decreasing
+z across three observations plus crossing the calibrated zLine starts note-on;
+fresh shadow evidence must confirm within 150 ms or the provisional note is
+released. Both techniques are currently disabled in the debug configuration,
+and this path has not been validated for accuracy or latency. The standalone
+contact-score experiment remains separate from the live note path.
 
-**Proposed z-motion predictor:** Use each fingertip's own MediaPipe `z` history
-as early evidence for note-on. While the fingertip is over a key and passes the
-knuckle eligibility gate, predict a press when its z is sufficiently far into
-the calibrated press range and it has moved downward by a satisfactory delta
-over a short time window. Treat that prediction as an early note-on candidate;
-fresh shadow evidence should confirm it shortly afterward. The calibration
-logs should establish the observed z direction and useful absolute and delta
-ranges before thresholds are chosen. In particular, earlier observations
-reported z increasing during downward movement, while the proposed absolute
-gate is described as z becoming low enough; resolve the sign/convention from
-the experiment logs rather than assuming either interpretation.
-
-Track history independently for each fingertip and timestamp observations so
-the delta is tied to elapsed time, not just frame count. On tracking loss,
-discard that finger's history. Recovery starts a fresh history; the existing
-shadow path remains available to detect contact after recovery. Keep the z
-signal as a predictor with a bounded confirmation window, rather than treating
-relative z as a metric distance to the paper.
+The saved trial labels support decreasing MediaPipe z as the working direction
+during the move phase after excluding its first four settling/hover samples.
+There is no per-finger movement-delta threshold. The evaluator uses a 150 ms
+history window and currently requires a net decrease; its `Z_LINE_TOLERANCE`
+applies only to the predicted sheet-position boundary and is zero for now.
+Verify the working direction and behavior with clearly labeled trials before
+tuning that tolerance. On tracking loss or eligibility/key changes, discard
+the finger's history and prediction latch.
 
 ### Knuckle-distance depth estimate
 
